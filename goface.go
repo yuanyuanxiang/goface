@@ -37,7 +37,7 @@ func initClassifier() {
 	const finder = "./facefinder"
 	cascadeFile, err := ioutil.ReadFile(finder)
 	if err != nil {
-		fmt.Printf("Error reading the cascade file: %v", err)
+		fmt.Printf("Error reading the cascade file: %v\n", err)
 	}
 
 	pigo := pigo.NewPigo()
@@ -45,7 +45,7 @@ func initClassifier() {
 	// the tree depth, the threshold and the prediction from tree's leaf nodes.
 	classifier, err = pigo.Unpack(cascadeFile)
 	if err != nil {
-		fmt.Printf("Error reading the cascade file: %s", err)
+		fmt.Printf("Error reading the cascade file: %s\n", err)
 	}
 }
 
@@ -53,7 +53,7 @@ func initClassifier() {
 func DetectFace(img image.Image, cb callback) []image.Image {
 	initClassifier()
 	if classifier == nil || img == nil {
-		fmt.Printf("The classifier or image is nil")
+		fmt.Printf("The classifier or image is nil\n")
 		return nil
 	}
 	src := pigo.ImgToNRGBA(img)
@@ -105,27 +105,32 @@ func AlarmProcess(dis map[string]interface{}, features []interface{}, arr []imag
 	initClassifier()
 	var levelThresholdMap = map[int]float64{0: 0.8, 1: 0.6, 2: 0.8, 3: 0.9}
 	threshold := levelThresholdMap[level]
+	if _, ok := dis["hash"]; !ok { // 特征计算
+		if img := dis["image"]; img != nil {
+			if v, ok := img.(image.Image); ok {
+				if varr := DetectFace(v, getArr); len(varr) > 0 {
+					if hash, err := gohash.AverageHash(varr[0]); err == nil {
+						dis["hash"] = hash
+					}
+				} else {
+					fmt.Printf("未从布控图像检测到人脸.\n")
+				}
+			}
+		}
+		fmt.Printf("计算布控图像的特征值=%v.\n", dis["hash"])
+	}
 	if hash, ok := dis["hash"]; ok { // 图片比对
 		for i, a := range arr {
 			v, _ := hash.(*gohash.ImageHash)
 			for _, img := range DetectFace(a, getArr) {
 				f := imageCompare(v, img)
 				if f > threshold {
-					fmt.Printf("[%s]相似度阈值%f, 触发告警.", ids[i], f)
+					fmt.Printf("[%s]相似度阈值%f, 触发告警.\n", ids[i], f)
 					return true
 				}
-				fmt.Printf("[%s]相似度阈值%f, 未触发告警.", ids[i], f)
+				fmt.Printf("[%s]相似度阈值%f, 未触发告警.\n", ids[i], f)
 			}
 		}
-	} else {
-		if img := dis["image"]; img != nil {
-			if v, ok := img.(image.Image); ok {
-				if hash, err := gohash.AverageHash(v); err == nil {
-					dis["hash"] = hash
-				}
-			}
-		}
-		fmt.Printf("计算布控图像的特征值=%v.", dis["hash"])
 	}
 	return false
 }
