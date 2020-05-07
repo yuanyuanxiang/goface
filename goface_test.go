@@ -1,4 +1,4 @@
-package goface
+package main
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 // https://github.com/esimov/pigo
 func TestGoface(t *testing.T) {
+	initClassifier()
 	file, err := os.Open("./test.jpg")
 	if err != nil {
 		fmt.Println(err)

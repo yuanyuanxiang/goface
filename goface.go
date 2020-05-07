@@ -1,4 +1,4 @@
-package goface
+package main
 
 import (
 	"fmt"
@@ -7,13 +7,15 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/corona10/goimagehash"
+	gohash "github.com/corona10/goimagehash"
 	pigo "github.com/esimov/pigo/core"
 )
 
 var classifier *pigo.Pigo
 
 var saveFlag bool
+
+func main() {}
 
 // save the result of DetectFace.
 func save(src *image.NRGBA, dets []pigo.Detection) {
@@ -32,8 +34,8 @@ func save(src *image.NRGBA, dets []pigo.Detection) {
 	}
 }
 
-// init the classifier.
-func init() {
+// initClassifier init the classifier.
+func initClassifier() {
 	if classifier != nil {
 		return
 	}
@@ -54,6 +56,7 @@ func init() {
 
 // DetectFace in a picture.
 func DetectFace(img image.Image) {
+	initClassifier()
 	if classifier == nil || img == nil {
 		fmt.Printf("The classifier or image is nil")
 	}
@@ -89,9 +92,9 @@ func DetectFace(img image.Image) {
 }
 
 // imageCompare 图片比对算法.
-func imageCompare(src *goimagehash.ImageHash, cmp image.Image) float64 {
+func imageCompare(src *gohash.ImageHash, cmp image.Image) float64 {
 	if src != nil {
-		hash, _ := goimagehash.AverageHash(cmp)
+		hash, _ := gohash.AverageHash(cmp)
 		if n, err := src.Distance(hash); err == nil {
 			return 1 - float64(n)/64.0
 		}
@@ -100,12 +103,13 @@ func imageCompare(src *goimagehash.ImageHash, cmp image.Image) float64 {
 }
 
 // AlarmProcess 告警处理单元.
+// go build -buildmode=plugin goface.go
 func AlarmProcess(dis map[string]interface{}, features []interface{}, arr []image.Image, ids []string, level int) bool {
 	var levelThresholdMap = map[int]float64{0: 0.8, 1: 0.6, 2: 0.8, 3: 0.9}
 	threshold := levelThresholdMap[level]
 	if hash, ok := dis["hash"]; ok { // 图片比对
 		for i, a := range arr {
-			v, _ := hash.(*goimagehash.ImageHash)
+			v, _ := hash.(*gohash.ImageHash)
 			f := imageCompare(v, a)
 			if f > threshold {
 				fmt.Printf("[%s]相似度阈值%f, 触发告警.", ids[i], f)
@@ -116,7 +120,7 @@ func AlarmProcess(dis map[string]interface{}, features []interface{}, arr []imag
 	} else {
 		if img := dis["image"]; img != nil {
 			if v, ok := img.(image.Image); ok {
-				if hash, err := goimagehash.AverageHash(v); err == nil {
+				if hash, err := gohash.AverageHash(v); err == nil {
 					dis["hash"] = hash
 				}
 			}
