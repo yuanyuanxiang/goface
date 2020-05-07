@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/jpeg"
 	"io/ioutil"
-	"os"
 
 	gohash "github.com/corona10/goimagehash"
 	pigo "github.com/esimov/pigo/core"
@@ -13,25 +11,22 @@ import (
 
 var classifier *pigo.Pigo
 
-var saveFlag bool
-
 func main() {}
 
-// save the result of DetectFace.
-func save(src *image.NRGBA, dets []pigo.Detection) {
-	for i, v := range dets {
-		x, y, w := v.Col, v.Row, v.Scale/2
-		img := src.SubImage(image.Rect(x-w, y-w, x+w, y+w))
-		file, err := os.Create(fmt.Sprintf("%d-%.2f", i, v.Q) + ".jpg")
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		defer file.Close()
-		if err = jpeg.Encode(file, img, &jpeg.Options{Quality: 100}); err != nil {
-			fmt.Println(err)
+// callback 回调处理逻辑.
+type callback func(src *image.NRGBA, dets []pigo.Detection) []image.Image
+
+// getArr get the result of DetectFace.
+func getArr(src *image.NRGBA, dets []pigo.Detection) []image.Image {
+	var r []image.Image
+	for _, v := range dets {
+		if v.Q > 3.14159 {
+			x, y, w := v.Col, v.Row, v.Scale/2
+			img := src.SubImage(image.Rect(x-w, y-w, x+w, y+w))
+			r = append(r, img)
 		}
 	}
+	return r
 }
 
 // initClassifier init the classifier.
@@ -55,10 +50,11 @@ func initClassifier() {
 }
 
 // DetectFace in a picture.
-func DetectFace(img image.Image) {
+func DetectFace(img image.Image, cb callback) []image.Image {
 	initClassifier()
 	if classifier == nil || img == nil {
 		fmt.Printf("The classifier or image is nil")
+		return nil
 	}
 	src := pigo.ImgToNRGBA(img)
 	pixels := pigo.RgbToGrayscale(src)
@@ -86,9 +82,10 @@ func DetectFace(img image.Image) {
 
 	// Calculate the intersection over union (IoU) of two clusters.
 	dets = classifier.ClusterDetections(dets, 0.2)
-	if saveFlag {
-		save(src, dets)
+	if cb != nil {
+		return cb(src, dets)
 	}
+	return nil
 }
 
 // imageCompare 图片比对算法.
@@ -105,17 +102,20 @@ func imageCompare(src *gohash.ImageHash, cmp image.Image) float64 {
 // AlarmProcess 告警处理单元.
 // go build -buildmode=plugin goface.go
 func AlarmProcess(dis map[string]interface{}, features []interface{}, arr []image.Image, ids []string, level int) bool {
+	initClassifier()
 	var levelThresholdMap = map[int]float64{0: 0.8, 1: 0.6, 2: 0.8, 3: 0.9}
 	threshold := levelThresholdMap[level]
 	if hash, ok := dis["hash"]; ok { // 图片比对
 		for i, a := range arr {
 			v, _ := hash.(*gohash.ImageHash)
-			f := imageCompare(v, a)
-			if f > threshold {
-				fmt.Printf("[%s]相似度阈值%f, 触发告警.", ids[i], f)
-				return true
+			for _, img := range DetectFace(a, getArr) {
+				f := imageCompare(v, img)
+				if f > threshold {
+					fmt.Printf("[%s]相似度阈值%f, 触发告警.", ids[i], f)
+					return true
+				}
+				fmt.Printf("[%s]相似度阈值%f, 未触发告警.", ids[i], f)
 			}
-			fmt.Printf("[%s]相似度阈值%f, 未触发告警.", ids[i], f)
 		}
 	} else {
 		if img := dis["image"]; img != nil {
